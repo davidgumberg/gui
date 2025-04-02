@@ -96,7 +96,7 @@ QImage QRImageWidget::exportImage()
         return QImage();
     }
 
-    return this->pixmap(Qt::ReturnByValue).toImage();
+    return this->pixmap().toImage();
 }
 
 void QRImageWidget::mousePressEvent(QMouseEvent *event)
