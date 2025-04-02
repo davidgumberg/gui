@@ -959,7 +959,7 @@ QDateTime StartOfDay(const QDate& date)
 
 bool HasPixmap(const QLabel* label)
 {
-    return !label->pixmap(Qt::ReturnByValue).isNull();
+    return !label->pixmap().isNull();
 }
 
 QString MakeHtmlLink(const QString& source, const QString& link)
