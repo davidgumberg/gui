@@ -27,6 +27,11 @@ namespace node {
 enum class TransactionError;
 } // namespace node
 
+enum class PSBTVersion {
+    V0,
+    V2
+};
+
 using common::PSBTError;
 
 // Magic bytes
@@ -94,7 +99,7 @@ inline constexpr uint8_t PSBT_SEPARATOR = 0x00;
 inline constexpr std::streamsize MAX_FILE_SIZE_PSBT{100'000'000}; // 100 MB
 
 // PSBT version number
-inline constexpr uint32_t PSBT_HIGHEST_VERSION = 2;
+inline constexpr PSBTVersion PSBT_HIGHEST_VERSION = PSBTVersion::V2;
 
 /** A structure for PSBT proprietary types */
 struct PSBTProprietary
@@ -281,7 +286,7 @@ static inline void ExpectedKeySize(const std::string& key_name, const std::vecto
 class PSBTInput
 {
 private:
-    uint32_t m_psbt_version;
+    PSBTVersion m_psbt_version;
 
 public:
     CTransactionRef non_witness_utxo;
@@ -325,7 +330,7 @@ public:
     void FillSignatureData(SignatureData& sigdata) const;
     void FromSignatureData(const SignatureData& sigdata);
     void Merge(const PSBTInput& input);
-    uint32_t GetVersion() const { return m_psbt_version; }
+    PSBTVersion GetVersion() const { return m_psbt_version; }
     COutPoint GetOutPoint() const;
     /**
      * Retrieves the UTXO for this input
@@ -336,21 +341,19 @@ public:
     bool GetUTXO(CTxOut& utxo) const;
     bool HasSignatures() const;
 
-    explicit PSBTInput(uint32_t psbt_version, const Txid& prev_txid, uint32_t prev_out, std::optional<uint32_t> sequence = std::nullopt)
+    explicit PSBTInput(PSBTVersion psbt_version, const Txid& prev_txid, uint32_t prev_out, std::optional<uint32_t> sequence = std::nullopt)
         : m_psbt_version(psbt_version),
         prev_txid(prev_txid),
         prev_out(prev_out),
         sequence(sequence)
-    {
-        assert(m_psbt_version == 0 || m_psbt_version == 2);
-    }
+    {}
 
     // Construct a PSBTInput when the previous txid and output index are expected to be serialized
     template <typename Stream>
-    explicit PSBTInput(deserialize_type, Stream& s, uint32_t psbt_version)
+    explicit PSBTInput(deserialize_type, Stream& s, PSBTVersion psbt_version)
         : m_psbt_version(psbt_version)
     {
-        assert(m_psbt_version == 2);
+        assert(psbt_version == PSBTVersion::V2);
         Unserialize(s);
     }
 
@@ -517,7 +520,7 @@ public:
         }
 
         // Write PSBTv2 fields
-        if (m_psbt_version >= 2) {
+        if (m_psbt_version == PSBTVersion::V2) {
             // Write prev txid, vout, sequence, and lock times
             SerializeToVector(s, CompactSizeWriter(PSBT_IN_PREVIOUS_TXID));
             SerializeToVector(s, prev_txid);
@@ -725,7 +728,7 @@ public:
                 case PSBT_IN_PREVIOUS_TXID:
                 {
                     ExpectedKeySize("Input Previous TXID", key, 1);
-                    if (m_psbt_version < 2) {
+                    if (m_psbt_version == PSBTVersion::V0) {
                         throw std::ios_base::failure("Previous txid is not allowed in PSBTv0");
                     }
                     UnserializeFromVector(s, prev_txid);
@@ -735,7 +738,7 @@ public:
                 case PSBT_IN_OUTPUT_INDEX:
                 {
                     ExpectedKeySize("Input Previous Output's Index", key, 1);
-                    if (m_psbt_version < 2) {
+                    if (m_psbt_version == PSBTVersion::V0) {
                         throw std::ios_base::failure("Previous output's index is not allowed in PSBTv0");
                     }
                     UnserializeFromVector(s, prev_out);
@@ -745,7 +748,7 @@ public:
                 case PSBT_IN_SEQUENCE:
                 {
                     ExpectedKeySize("Input Sequence", key, 1);
-                    if (m_psbt_version < 2) {
+                    if (m_psbt_version == PSBTVersion::V0) {
                         throw std::ios_base::failure("Sequence is not allowed in PSBTv0");
                     }
                     sequence.emplace();
@@ -755,7 +758,7 @@ public:
                 case PSBT_IN_REQUIRED_TIME_LOCKTIME:
                 {
                     ExpectedKeySize("Input Required Time Based Locktime", key, 1);
-                    if (m_psbt_version < 2) {
+                    if (m_psbt_version == PSBTVersion::V0) {
                         throw std::ios_base::failure("Required time based locktime is not allowed in PSBTv0");
                     }
                     time_locktime.emplace();
@@ -768,7 +771,7 @@ public:
                 case PSBT_IN_REQUIRED_HEIGHT_LOCKTIME:
                 {
                     ExpectedKeySize("Input Required Height Based Locktime", key, 1);
-                    if (m_psbt_version < 2) {
+                    if (m_psbt_version == PSBTVersion::V0) {
                         throw std::ios_base::failure("Required height based locktime is not allowed in PSBTv0");
                     }
                     height_locktime.emplace();
@@ -923,7 +926,7 @@ public:
         }
 
         // Make sure required PSBTv2 fields are present
-        if (m_psbt_version >= 2) {
+        if (m_psbt_version == PSBTVersion::V2) {
             if (!found_prev_txid) {
                 throw std::ios_base::failure("Previous TXID is required in PSBTv2");
             }
@@ -938,7 +941,7 @@ public:
 class PSBTOutput
 {
 private:
-    uint32_t m_psbt_version;
+    PSBTVersion m_psbt_version;
 
 public:
     CScript redeem_script;
@@ -959,22 +962,20 @@ public:
     void FillSignatureData(SignatureData& sigdata) const;
     void FromSignatureData(const SignatureData& sigdata);
     void Merge(const PSBTOutput& output);
-    uint32_t GetVersion() const { return m_psbt_version; }
+    PSBTVersion GetVersion() const { return m_psbt_version; }
 
-    explicit PSBTOutput(uint32_t psbt_version, CAmount amount, const CScript& script)
+    explicit PSBTOutput(PSBTVersion psbt_version, CAmount amount, const CScript& script)
         : m_psbt_version(psbt_version),
         amount(amount),
         script(script)
-    {
-        assert(m_psbt_version == 0 || m_psbt_version == 2);
-    }
+    {}
 
     // Construct a PSBTOutput when the amount and script are expected to be serialized
     template <typename Stream>
-    explicit PSBTOutput(deserialize_type, Stream& s, uint32_t psbt_version)
+    explicit PSBTOutput(deserialize_type, Stream& s, PSBTVersion psbt_version)
         : m_psbt_version(psbt_version)
     {
-        assert(m_psbt_version == 2);
+        assert(m_psbt_version == PSBTVersion::V2);
         Unserialize(s);
     }
 
@@ -997,7 +998,7 @@ public:
         // Write any hd keypaths
         SerializeHDKeypaths(s, hd_keypaths, CompactSizeWriter(PSBT_OUT_BIP32_DERIVATION));
 
-        if (m_psbt_version >= 2) {
+        if (m_psbt_version == PSBTVersion::V2) {
             // Write amount and spk
             SerializeToVector(s, CompactSizeWriter(PSBT_OUT_AMOUNT));
             SerializeToVector(s, amount);
@@ -1119,7 +1120,7 @@ public:
                 case PSBT_OUT_AMOUNT:
                 {
                     ExpectedKeySize("Output Amount", key, 1);
-                    if (m_psbt_version < 2) {
+                    if (m_psbt_version == PSBTVersion::V0) {
                         throw std::ios_base::failure("Output amount is not allowed in PSBTv0");
                     }
                     UnserializeFromVector(s, amount);
@@ -1129,7 +1130,7 @@ public:
                 case PSBT_OUT_SCRIPT:
                 {
                     ExpectedKeySize("Output Script", key, 1);
-                    if (m_psbt_version < 2) {
+                    if (m_psbt_version == PSBTVersion::V0) {
                         throw std::ios_base::failure("Output script is not allowed in PSBTv0");
                     }
                     s >> script;
@@ -1223,7 +1224,7 @@ public:
         }
 
         // Make sure required PSBTv2 fields are present
-        if (m_psbt_version >= 2) {
+        if (m_psbt_version == PSBTVersion::V2) {
             if (!found_amount) {
                 throw std::ios_base::failure("Output amount is required in PSBTv2");
             }
@@ -1238,7 +1239,7 @@ public:
 class PartiallySignedTransaction
 {
 private:
-    std::optional<uint32_t> m_version;
+    std::optional<PSBTVersion> m_version;
 
 public:
     // We use a vector of CExtPubKey in the event that there happens to be the same KeyOriginInfos for different CExtPubKeys
@@ -1253,7 +1254,7 @@ public:
     uint32_t tx_version;
     std::optional<uint32_t> fallback_locktime;
 
-    uint32_t GetVersion() const;
+    PSBTVersion GetVersion() const;
 
     /** Merge psbt into this. The two psbts must have the same underlying CTransaction (i.e. the
       * same actual Bitcoin transaction.) Returns true if the merge succeeded, false otherwise. */
@@ -1266,7 +1267,7 @@ public:
     std::optional<uint32_t> ComputeTimeLock() const;
     std::optional<CMutableTransaction> GetUnsignedTx() const;
     std::optional<Txid> GetUniqueID() const;
-    explicit PartiallySignedTransaction(const CMutableTransaction& tx, uint32_t version = 2);
+    explicit PartiallySignedTransaction(const CMutableTransaction& tx, PSBTVersion version = PSBTVersion::V2);
 
     template <typename Stream>
     inline void Serialize(Stream& s) const {
@@ -1478,9 +1479,19 @@ public:
                     ExpectedKeySize("Global PSBT Version", key, 1);
                     uint32_t v;
                     UnserializeFromVector(s, v);
-                    m_version = v;
-                    if (*m_version > PSBT_HIGHEST_VERSION) {
-                        throw std::ios_base::failure("Unsupported version number");
+                    switch(v) {
+                        case 0:
+                        {
+                            m_version = PSBTVersion::V0;
+                        }
+                        case 2:
+                        {
+                            m_version = PSBTVersion::V2;
+                        }
+                        default:
+                        {
+                            throw std::ios_base::failure("Unsupported version number");
+                        }
                     }
                     break;
                 }

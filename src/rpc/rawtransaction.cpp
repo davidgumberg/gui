@@ -1159,7 +1159,7 @@ static RPCMethod decodepsbt()
     result.pushKV("global_xpubs", std::move(global_xpubs));
 
     // Add PSBTv2 stuff
-    if (psbtx.GetVersion() >= 2) {
+    if (psbtx.GetVersion() == PSBTVersion::V2) {
         result.pushKV("tx_version", psbtx.tx_version);
         if (psbtx.fallback_locktime.has_value()) {
             result.pushKV("fallback_locktime", static_cast<uint64_t>(*psbtx.fallback_locktime));
@@ -1923,7 +1923,7 @@ static RPCMethod joinpsbts()
         }
         psbtxs.push_back(*psbt_res);
         const PartiallySignedTransaction& psbtx = psbtxs.back();
-        if (psbtx.GetVersion() != 0) {
+        if (psbtx.GetVersion() != PSBTVersion::V0) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "joinpsbts only operates on version 0 PSBTs");
         }
         // Choose the highest version number

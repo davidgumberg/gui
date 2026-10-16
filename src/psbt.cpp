@@ -18,10 +18,8 @@
 
 using common::PSBTError;
 
-PartiallySignedTransaction::PartiallySignedTransaction(const CMutableTransaction& tx, uint32_t version) : m_version(version)
+PartiallySignedTransaction::PartiallySignedTransaction(const CMutableTransaction& tx, PSBTVersion version) : m_version(version)
 {
-    assert(m_version == 0 || m_version == 2);
-
     tx_version = tx.version;
     fallback_locktime = tx.nLockTime;
     inputs.reserve(tx.vin.size());
@@ -248,7 +246,7 @@ bool PartiallySignedTransaction::AddOutput(const PSBTOutput& psbtout)
         return false;
     }
 
-    if (GetVersion() < 2) {
+    if (GetVersion() == PSBTVersion::V0) {
         // This is a v0 psbt, do the v0 AddOutput
         outputs.push_back(psbtout);
         return true;
@@ -882,10 +880,7 @@ util::Result<PartiallySignedTransaction> DecodeRawPSBT(std::span<const std::byte
     }
 }
 
-uint32_t PartiallySignedTransaction::GetVersion() const
+PSBTVersion PartiallySignedTransaction::GetVersion() const
 {
-    if (m_version != std::nullopt) {
-        return *m_version;
-    }
-    return 0;
+    return m_version.value_or(PSBTVersion::V0);
 }
